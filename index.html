@@ -134,9 +134,11 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 /* ===== CONFIGURAÇÃO DO SUPABASE: preencha as duas linhas abaixo =====
    url: Supabase > Project Settings > API > Project URL (ex.: https://abcdefgh.supabase.co)
    key: Supabase > Project Settings > API > chave "anon" ou "publishable".
+   NUNCA coloque aqui a chave "service_role" (ela dá acesso total ao banco).
    Se ficar vazio, a ferramenta funciona normalmente, só sem a biblioteca. */
-const SB={url:'https://nlheaoifppnnapckgnkh.supabase.co/',key:'sb_publishable_w0JRi6nuO2VMpvb2xxo2aw_yaBM1S46'};
-SB.url=SB.url.trim().replace(/\/+$/,'');SB.key=SB.key.trim();
+const SB={url:'https://nlheaoifppnnapckgnkh.supabase.co',key:'sb_publishable_w0JRi6nuO2VMpvb2xxo2aw_yaBM1S46'};
+try{SB.url=new URL(SB.url.trim()).origin}catch(e){SB.url=SB.url.trim().replace(/\/+$/,'')}
+SB.key=SB.key.trim();
 const TIPOS={
   tarefa:{nome:'Atividade',filhos:['pendencia','pendatv']},
   pendatv:{nome:'Pendência Atividade',filhos:['acao']},
@@ -427,6 +429,7 @@ async function salvar(nome,texto,tipo){
   catch(e){if(e&&e.code!=='declined')aviso('Não foi possível salvar o arquivo.')}
 }
 function normalizar(d){
+  if(d.libId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.libId)){delete d.libId;delete d.libVer}
   Object.values(d.nos).forEach(n=>{['resp','prazo','obs','atipo','subtipo','cliente','dest','equipe'].forEach(k=>{if(typeof n[k]!=='string')n[k]=''});n.declResp=!!n.declResp;n.obsObrig=!!n.obsObrig;if(n.tipo==='fim')n.nome='FIM'});
   const r=d.nos[d.raiz];
   if(!r.atipo)r.atipo='Tarefa';
@@ -609,7 +612,7 @@ async function salvarBib(){
     }else{const ref=await col('fluxos').add(campos);S.libId=ref.id}
     S.libVer=agora;bibForcar=null;guardar();rotuloBib();
     aviso('Fluxo salvo na biblioteca.'+(campos.cliente?'':' Dica: preencha o cliente na atividade para organizá-lo por cliente.'));
-  }catch(e){aviso('Não foi possível salvar na biblioteca. Confira se você tem permissão para editar esta página.')}
+  }catch(e){aviso('Não foi possível salvar na biblioteca ('+((e&&e.message)||'erro')+'). Verifique a conexão e se o login não expirou.')}
 }
 async function bibListar(){
   $('bibLista').textContent='Carregando…';
