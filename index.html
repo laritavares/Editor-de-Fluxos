@@ -134,9 +134,8 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 /* ===== CONFIGURAÇÃO DO SUPABASE: preencha as duas linhas abaixo =====
    url: Supabase > Project Settings > API > Project URL (ex.: https://abcdefgh.supabase.co)
    key: Supabase > Project Settings > API > chave "anon" ou "publishable".
-   NUNCA coloque aqui a chave "service_role" (ela dá acesso total ao banco).
    Se ficar vazio, a ferramenta funciona normalmente, só sem a biblioteca. */
-const SB={url:'https://nlheaoifppnnapckgnkh.supabase.co/rest/v1/',key:'sb_publishable_w0JRi6nuO2VMpvb2xxo2aw_yaBM1S46'};
+const SB={url:'https://nlheaoifppnnapckgnkh.supabase.co/',key:'sb_publishable_w0JRi6nuO2VMpvb2xxo2aw_yaBM1S46'};
 SB.url=SB.url.trim().replace(/\/+$/,'');SB.key=SB.key.trim();
 const TIPOS={
   tarefa:{nome:'Atividade',filhos:['pendencia','pendatv']},
