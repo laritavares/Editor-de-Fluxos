@@ -63,7 +63,9 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .pes button{flex:none;border-radius:6px;padding:4px 10px}
 .abas{display:flex;gap:6px;margin:8px 0}
 .abas button[aria-pressed="true"]{background:var(--sel);border-color:var(--blue)}
-.bi{display:flex;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
+[hidden]{display:none!important}
+.bi{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
+.hist{flex-basis:100%;font-size:12px;color:var(--muted);padding:4px 0 2px 8px;border-left:2px solid var(--border)}
 .bi div{flex:1;min-width:0}
 .bi button{flex:none;border-radius:6px;padding:4px 10px}
 #bibLista h3{font-size:13px;color:var(--blue);margin:12px 0 2px;font-weight:500}
@@ -156,7 +158,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 
 function add(pai,tipo,nome){
   const id='n'+(S.seq++);
-  S.nos[id]={id,tipo,nome,pai,filhos:[],resp:'',prazo:'',obs:'',anexo:false,volta:'',atipo:'',subtipo:'',cliente:'',dest:(tipo==='pendencia'||tipo==='pendatv')?'ativo':'',equipe:'',declResp:false,obsObrig:false};
+  S.nos[id]={id,tipo,nome,pai,filhos:[],resp:'',prazo:'',obs:'',anexo:false,volta:'',atipo:'',subtipo:'',cliente:'',dest:(tipo==='pendencia'||tipo==='pendatv')?'ativo':'',equipe:'',declResp:false,obsObrig:false,chamado:''};
   if(pai)S.nos[pai].filhos.push(id);
   return id;
 }
@@ -250,7 +252,7 @@ function blocoDest(n){
 function cort(s){return s.length>28?s.slice(0,27)+'…':s}
 function info(n){
   const rp=usaRP(n);
-  const L=n.tipo==='tarefa'?[...(n.atipo?[{t:cort(n.atipo),m:1}]:[]),...quebra(n.subtipo||'Atividade sem nome',24).map(t=>({t,m:0})),...(n.cliente?[{t:cort(n.cliente),m:1}]:[])]:quebra((n.tipo==='fim'?'':n.nome)+(rp&&n.prazo?' ('+n.prazo+')':''),24).map(t=>({t,m:0}));
+  const L=n.tipo==='tarefa'?[...(n.atipo?[{t:cort(n.atipo),m:1}]:[]),...quebra(n.subtipo||'Atividade sem nome',24).map(t=>({t,m:0})),...(n.cliente?[{t:cort(n.cliente),m:1}]:[]),...(n.chamado?[{t:cort('Chamado '+n.chamado),m:1}]:[])]:quebra((n.tipo==='fim'?'':n.nome)+(rp&&n.prazo?' ('+n.prazo+')':''),24).map(t=>({t,m:0}));
   const dt=destTexto(n);if(dt)L.push({t:cort(dt),m:1});
   if(n.anexo)L.push({t:'Anexo obrigatório',m:1});
   if(n.obsObrig)L.push({t:'Observação obrigatória',m:1});
@@ -319,7 +321,8 @@ function lateral(){
     ${n.tipo!=='tarefa'&&n.tipo!=='fim'?`<label for="f_nome">${n.tipo==='pendatv'?'Pendência Atividade':'Nome'}</label><input id="f_nome" data-k="nome" value="${esc(n.nome)}">`:''}
     ${n.tipo==='tarefa'?`<label for="f_atipo">Tipo de atividade – obrigatório</label><select id="f_atipo" data-k="atipo">${['Tarefa','Prazo','Decisão'].map(o=>`<option ${n.atipo===o?'selected':''}>${o}</option>`).join('')}</select>
     <label for="f_sub">Subtipo de atividade – obrigatório</label><input id="f_sub" data-k="subtipo" data-req="1" value="${esc(n.subtipo)}"${n.subtipo.trim()?'':' class="falta"'}>
-    <label for="f_cli">Nome do cliente – obrigatório</label><input id="f_cli" data-k="cliente" data-req="1" value="${esc(n.cliente)}"${n.cliente.trim()?'':' class="falta"'}>`:''}
+    <label for="f_cli">Nome do cliente – obrigatório</label><input id="f_cli" data-k="cliente" data-req="1" value="${esc(n.cliente)}"${n.cliente.trim()?'':' class="falta"'}>
+    <label for="f_chamado">Número do chamado</label><input id="f_chamado" data-k="chamado" value="${esc(n.chamado)}">`:''}
     ${usaRP(n)?`${blocoDest(n)}
     <label for="f_prazo">Prazo (ex.: D+1, D+2, D livre) – obrigatório</label><input id="f_prazo" data-k="prazo" data-req="1" value="${esc(n.prazo)}"${n.prazo.trim()?'':' class="falta"'}>`:''}
     ${n.tipo==='acao'?`<label class="chk"><input type="checkbox" data-k="anexo" ${n.anexo?'checked':''}>Anexo obrigatório</label>
@@ -389,7 +392,7 @@ window.addEventListener('pointerup',e=>{
 /* ---------- guia, arquivos, botões ---------- */
 function guiaTexto(){
   const R=S.nos[S.raiz];
-  const L=['ATIVIDADE: '+(R.subtipo||'(sem nome)'),'Tipo: '+(R.atipo||'-')+(R.cliente?' | Cliente: '+R.cliente:'')];
+  const L=['ATIVIDADE: '+(R.subtipo||'(sem nome)'),'Tipo: '+(R.atipo||'-')+(R.cliente?' | Cliente: '+R.cliente:'')+(R.chamado?' | Chamado: '+R.chamado:'')];
   {const fr=faltas(R);if(fr.length)L.push('ATENÇÃO: falta '+juntar(fr))}
   if(R.obs)L.push('Obs.: '+R.obs.replace(/\n/g,' '));
   L.push('');
@@ -430,7 +433,7 @@ async function salvar(nome,texto,tipo){
 }
 function normalizar(d){
   if(d.libId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.libId)){delete d.libId;delete d.libVer}
-  Object.values(d.nos).forEach(n=>{['resp','prazo','obs','atipo','subtipo','cliente','dest','equipe'].forEach(k=>{if(typeof n[k]!=='string')n[k]=''});n.declResp=!!n.declResp;n.obsObrig=!!n.obsObrig;if(n.tipo==='fim')n.nome='FIM'});
+  Object.values(d.nos).forEach(n=>{['resp','prazo','obs','atipo','subtipo','cliente','dest','equipe','chamado'].forEach(k=>{if(typeof n[k]!=='string')n[k]=''});n.declResp=!!n.declResp;n.obsObrig=!!n.obsObrig;if(n.tipo==='fim')n.nome='FIM'});
   const r=d.nos[d.raiz];
   if(!r.atipo)r.atipo='Tarefa';
   if(!d.v){
@@ -463,7 +466,7 @@ async function salvarJpg(){
   if(lg.naturalWidth){const lh=64,lw=lh*lg.naturalWidth/lg.naturalHeight;g.drawImage(lg,24*sc,14*sc,lw*sc,lh*sc);tx=24+lw+24}
   g.fillStyle=PAL.text;g.font=`bold ${22*sc}px Arial, sans-serif`;g.fillText(R.subtipo||'Atividade sem nome',tx*sc,44*sc);
   g.fillStyle=PAL.muted;g.font=`${14*sc}px Arial, sans-serif`;
-  g.fillText([R.atipo,R.cliente].filter(Boolean).join('  |  '),tx*sc,68*sc);
+  g.fillText([R.atipo,R.cliente,R.chamado?'Chamado '+R.chamado:''].filter(Boolean).join('  |  '),tx*sc,68*sc);
   {const t=new Date(),z=x=>String(x).padStart(2,'0');
    g.textAlign='right';g.fillStyle=PAL.muted;g.font=`${12*sc}px Arial, sans-serif`;
    g.fillText('Exportado em '+z(t.getDate())+'/'+z(t.getMonth()+1)+'/'+t.getFullYear()+' às '+z(t.getHours())+':'+z(t.getMinutes()),(W-24)*sc,22*sc);
@@ -600,7 +603,9 @@ async function salvarBib(){
   Object.values(S.nos).forEach(n=>{const f=faltas(n);if(f.length)pend.push((n.tipo==='tarefa'?'Atividade':(n.nome||TIPOS[n.tipo].nome))+' ('+juntar(f)+')')});
   if(pend.length){aviso('Preencha os campos obrigatórios antes de salvar: '+pend.slice(0,3).join('; ')+(pend.length>3?' e mais '+(pend.length-3):'')+'.');return}
   const R=S.nos[S.raiz],agora=Date.now();
-  const campos={nome:S.nome,cliente:R.cliente||'',atividade:R.subtipo||'',atipo:R.atipo||'',atualizado:agora,dados:dadosFluxo()};
+  const campos={nome:S.nome,cliente:R.cliente||'',atividade:R.subtipo||'',atipo:R.atipo||'',atualizado:agora,chamado:R.chamado||'',dados:dadosFluxo()};
+  const quem=(typeof sessao!=='undefined'&&sessao&&sessao.email)||'';
+  const lim=h=>h.length>100?[h[0]].concat(h.slice(-99)):h;
   try{
     if(S.libId){
       const ref=col('fluxos').doc(S.libId),snap=await ref.get();
@@ -608,8 +613,16 @@ async function salvarBib(){
         bibForcar=S.libId;rotuloBib();
         aviso('Outra pessoa alterou este fluxo depois que você o abriu. Clique de novo para sobrescrever.');return;
       }
+      let hist=[];
+      if(snap.exists){
+        const o=snap.data();
+        try{hist=JSON.parse(o.historico||'[]')}catch(e){hist=[]}
+        if(!hist.length&&o.atualizado)hist.push({quando:o.atualizado,quem:'',acao:'Criado'});
+        hist.push({quando:agora,quem,acao:'Alterado'});
+      }else hist=[{quando:agora,quem,acao:'Criado'}];
+      campos.historico=JSON.stringify(lim(hist));
       await ref.set(campos);
-    }else{const ref=await col('fluxos').add(campos);S.libId=ref.id}
+    }else{campos.historico=JSON.stringify([{quando:agora,quem,acao:'Criado'}]);const ref=await col('fluxos').add(campos);S.libId=ref.id}
     S.libVer=agora;bibForcar=null;guardar();rotuloBib();
     aviso('Fluxo salvo na biblioteca.'+(campos.cliente?'':' Dica: preencha o cliente na atividade para organizá-lo por cliente.'));
   }catch(e){aviso('Não foi possível salvar na biblioteca ('+((e&&e.message)||'erro')+'). Verifique a conexão e se o login não expirou.')}
@@ -625,14 +638,17 @@ async function bibListar(){
 function bibRender(){
   const q=$('bibBusca').value.toLowerCase(),L=$('bibLista');
   const data=i=>i.atualizado?new Date(i.atualizado).toLocaleDateString('pt-BR'):'';
-  const f=bibItens.filter(i=>[i.cliente,i.atividade,i.nome].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.atualizado||0)-(a.atualizado||0));
+  const f=bibItens.filter(i=>[i.cliente,i.atividade,i.nome,i.chamado].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.atualizado||0)-(a.atualizado||0));
   if(!f.length){L.innerHTML='<p class="dica">'+(bibAba==='fluxos'?'Nenhum fluxo salvo ainda.':'Nenhum modelo salvo ainda.')+'</p>';return}
   if(bibAba==='modelos'){
     L.innerHTML=f.map(i=>`<div class="bi"><div><strong>${esc(i.nome||'Modelo sem nome')}</strong><br><span class="dica">${esc(i.atipo||'')}${i.atipo?' · ':''}${data(i)}</span></div><button data-usar="${i.id}">Usar modelo</button><button data-apagar="${i.id}">Excluir</button></div>`).join('');
     return;
   }
   const g={};f.forEach(i=>{const c=i.cliente||'Sem cliente';(g[c]=g[c]||[]).push(i)});
-  L.innerHTML=Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<h3>${esc(c)}</h3>`+g[c].map(i=>`<div class="bi"><div><strong>${esc(i.atividade||'Atividade sem nome')}</strong><br><span class="dica">${esc(i.atipo||'')}${i.atipo?' · ':''}${esc(i.nome||'')} · ${data(i)}</span></div><button data-abrir="${i.id}">Abrir</button><button data-apagar="${i.id}">Excluir</button></div>`).join('')).join('');
+  const dh=t=>t?new Date(t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
+  const hist=i=>{try{return JSON.parse(i.historico||'[]')}catch(e){return[]}};
+  const linha=i=>{const h=hist(i),u=h[h.length-1];return (i.chamado?'Chamado '+esc(i.chamado)+' · ':'')+(u?(h.length>1?'Alterado':'Criado')+' em '+dh(u.quando)+(u.quem?' por '+esc(u.quem):''):data(i))};
+  L.innerHTML=Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<h3>${esc(c)}</h3>`+g[c].map(i=>`<div class="bi"><div><strong>${esc(i.atividade||'Atividade sem nome')}</strong><br><span class="dica">${esc(i.atipo||'')}${i.atipo?' · ':''}${esc(i.nome||'')}<br>${linha(i)}</span></div><button data-hist="${i.id}">Histórico</button><button data-abrir="${i.id}">Abrir</button><button data-apagar="${i.id}">Excluir</button><div class="hist" hidden>${hist(i).slice().reverse().map(h=>`<div>${dh(h.quando)} · ${esc(h.acao||'')} · ${esc(h.quem||'usuário não registrado')}</div>`).join('')||'<div>Sem histórico registrado.</div>'}</div></div>`).join('')).join('');
 }
 function aba(a){
   bibAba=a;$('abaF').setAttribute('aria-pressed',a==='fluxos');$('abaM').setAttribute('aria-pressed',a==='modelos');
@@ -647,6 +663,7 @@ $('dlgBib').addEventListener('click',async ev=>{
   if(b.id==='abaF')return aba('fluxos');
   if(b.id==='abaM')return aba('modelos');
   if(b.id==='bibFechar')return $('dlgBib').close();
+  if(b.dataset.hist!==undefined){const p=b.closest('.bi').querySelector('.hist');p.hidden=!p.hidden;return}
   if(b.id==='bibSalvarModelo'){
     const nm=$('bibNomeModelo').value.trim();
     if(!nm){bm('Dê um nome ao modelo.');return}
