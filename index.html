@@ -64,8 +64,9 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .abas{display:flex;gap:6px;margin:8px 0}
 .abas button[aria-pressed="true"]{background:var(--sel);border-color:var(--blue)}
 [hidden]{display:none!important}
+#histLista>div{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
 .bi{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
-.hist{flex-basis:100%;font-size:12px;color:var(--muted);padding:4px 0 2px 8px;border-left:2px solid var(--border)}
+.hist{display:none;flex-basis:100%;font-size:12px;color:var(--muted);padding:4px 0 2px 8px;border-left:2px solid var(--border)}
 .bi div{flex:1;min-width:0}
 .bi button{flex:none;border-radius:6px;padding:4px 10px}
 #bibLista h3{font-size:13px;color:var(--blue);margin:12px 0 2px;font-weight:500}
@@ -131,6 +132,12 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   <label for="lgSenha">Senha</label><input id="lgSenha" type="password" autocomplete="current-password">
   <p class="dica" id="lgMsg"></p>
   <div class="bt"><button id="lgCancelar">Cancelar</button><button id="lgEntrar">Entrar</button></div>
+</dialog>
+<dialog id="dlgHist">
+  <h2 style="margin:0 0 4px;font-size:16px;font-weight:500">Histórico de alterações</h2>
+  <p class="dica" id="histSub" style="margin:0 0 8px"></p>
+  <div id="histLista" style="max-height:55vh;overflow:auto"></div>
+  <div class="bt"><button id="histFechar">Fechar</button></div>
 </dialog>
 <script>
 /* ===== CONFIGURAÇÃO DO SUPABASE: preencha as duas linhas abaixo =====
@@ -252,7 +259,7 @@ function blocoDest(n){
 function cort(s){return s.length>28?s.slice(0,27)+'…':s}
 function info(n){
   const rp=usaRP(n);
-  const L=n.tipo==='tarefa'?[...(n.atipo?[{t:cort(n.atipo),m:1}]:[]),...quebra(n.subtipo||'Atividade sem nome',24).map(t=>({t,m:0})),...(n.cliente?[{t:cort(n.cliente),m:1}]:[]),...(n.chamado?[{t:cort('Chamado '+n.chamado),m:1}]:[])]:quebra((n.tipo==='fim'?'':n.nome)+(rp&&n.prazo?' ('+n.prazo+')':''),24).map(t=>({t,m:0}));
+  const L=n.tipo==='tarefa'?[...(n.atipo?[{t:cort(n.atipo),m:1}]:[]),...quebra(n.subtipo||'Atividade sem nome',24).map(t=>({t,m:0})),...(n.cliente?[{t:cort(n.cliente),m:1}]:[])]:quebra((n.tipo==='fim'?'':n.nome)+(rp&&n.prazo?' ('+n.prazo+')':''),24).map(t=>({t,m:0}));
   const dt=destTexto(n);if(dt)L.push({t:cort(dt),m:1});
   if(n.anexo)L.push({t:'Anexo obrigatório',m:1});
   if(n.obsObrig)L.push({t:'Observação obrigatória',m:1});
@@ -466,7 +473,7 @@ async function salvarJpg(){
   if(lg.naturalWidth){const lh=64,lw=lh*lg.naturalWidth/lg.naturalHeight;g.drawImage(lg,24*sc,14*sc,lw*sc,lh*sc);tx=24+lw+24}
   g.fillStyle=PAL.text;g.font=`bold ${22*sc}px Arial, sans-serif`;g.fillText(R.subtipo||'Atividade sem nome',tx*sc,44*sc);
   g.fillStyle=PAL.muted;g.font=`${14*sc}px Arial, sans-serif`;
-  g.fillText([R.atipo,R.cliente,R.chamado?'Chamado '+R.chamado:''].filter(Boolean).join('  |  '),tx*sc,68*sc);
+  g.fillText([R.atipo,R.cliente].filter(Boolean).join('  |  '),tx*sc,68*sc);
   {const t=new Date(),z=x=>String(x).padStart(2,'0');
    g.textAlign='right';g.fillStyle=PAL.muted;g.font=`${12*sc}px Arial, sans-serif`;
    g.fillText('Exportado em '+z(t.getDate())+'/'+z(t.getMonth()+1)+'/'+t.getFullYear()+' às '+z(t.getHours())+':'+z(t.getMinutes()),(W-24)*sc,22*sc);
@@ -648,7 +655,7 @@ function bibRender(){
   const dh=t=>t?new Date(t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
   const hist=i=>{try{return JSON.parse(i.historico||'[]')}catch(e){return[]}};
   const linha=i=>{const h=hist(i),u=h[h.length-1];return (i.chamado?'Chamado '+esc(i.chamado)+' · ':'')+(u?(h.length>1?'Alterado':'Criado')+' em '+dh(u.quando)+(u.quem?' por '+esc(u.quem):''):data(i))};
-  L.innerHTML=Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<h3>${esc(c)}</h3>`+g[c].map(i=>`<div class="bi"><div><strong>${esc(i.atividade||'Atividade sem nome')}</strong><br><span class="dica">${esc(i.atipo||'')}${i.atipo?' · ':''}${esc(i.nome||'')}<br>${linha(i)}</span></div><button data-hist="${i.id}">Histórico</button><button data-abrir="${i.id}">Abrir</button><button data-apagar="${i.id}">Excluir</button><div class="hist" hidden>${hist(i).slice().reverse().map(h=>`<div>${dh(h.quando)} · ${esc(h.acao||'')} · ${esc(h.quem||'usuário não registrado')}</div>`).join('')||'<div>Sem histórico registrado.</div>'}</div></div>`).join('')).join('');
+  L.innerHTML=Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<h3>${esc(c)}</h3>`+g[c].map(i=>`<div class="bi"><div><strong>${esc(i.atividade||'Atividade sem nome')}</strong><br><span class="dica">${esc(i.atipo||'')}${i.atipo?' · ':''}${esc(i.nome||'')}<br>${linha(i)}</span></div><button data-hist="${i.id}">Histórico</button><button data-abrir="${i.id}">Abrir</button><button data-apagar="${i.id}">Excluir</button></div>`).join('')).join('');
 }
 function aba(a){
   bibAba=a;$('abaF').setAttribute('aria-pressed',a==='fluxos');$('abaM').setAttribute('aria-pressed',a==='modelos');
@@ -657,13 +664,21 @@ function aba(a){
 $('bBib').onclick=()=>{aba('fluxos');$('dlgBib').showModal()};
 $('bSalvarBib').onclick=salvarBib;
 $('bibBusca').oninput=bibRender;
+$('histFechar').onclick=()=>$('dlgHist').close();
 $('dlgBib').addEventListener('click',async ev=>{
   const b=ev.target.closest('button');if(!b)return;
   const bm=t=>{$('bibMsg').textContent=t};
   if(b.id==='abaF')return aba('fluxos');
   if(b.id==='abaM')return aba('modelos');
   if(b.id==='bibFechar')return $('dlgBib').close();
-  if(b.dataset.hist!==undefined){const p=b.closest('.bi').querySelector('.hist');p.hidden=!p.hidden;return}
+  if(b.dataset.hist!==undefined){
+    const it=bibItens.find(i=>i.id===b.dataset.hist);if(!it)return;
+    let h=[];try{h=JSON.parse(it.historico||'[]')}catch(e){}
+    const dh=t=>t?new Date(t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
+    $('histSub').textContent=(it.atividade||'Atividade sem nome')+(it.cliente?' · '+it.cliente:'')+(it.chamado?' · Chamado '+it.chamado:'');
+    $('histLista').innerHTML=h.length?h.slice().reverse().map(x=>`<div><strong>${esc(x.acao||'')}</strong> · ${dh(x.quando)}<br><span class="dica">${esc(x.quem||'usuário não registrado')}</span></div>`).join(''):'<p class="dica">Sem histórico registrado.</p>';
+    $('dlgHist').showModal();return;
+  }
   if(b.id==='bibSalvarModelo'){
     const nm=$('bibNomeModelo').value.trim();
     if(!nm){bm('Dê um nome ao modelo.');return}
