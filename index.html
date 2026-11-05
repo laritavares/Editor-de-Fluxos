@@ -64,6 +64,16 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .abas{display:flex;gap:6px;margin:8px 0}
 .abas button[aria-pressed="true"]{background:var(--sel);border-color:var(--blue)}
 [hidden]{display:none!important}
+#gate{display:none;position:fixed;inset:0;z-index:100;background:var(--bg);align-items:center;justify-content:center;padding:24px;overflow:auto}
+body.travado #gate{display:flex}
+body.travado header,body.travado main{visibility:hidden}
+#gForm{width:min(380px,100%);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:10px;padding:24px;background:var(--panel);box-sizing:border-box}
+#gLogo{display:block;height:52px;margin:0 auto 14px}
+#gForm h1{font-size:18px;font-weight:500;text-align:center;margin:0 0 4px}
+#gForm .dica{text-align:center;margin:0 0 6px}
+#gForm button{width:100%;margin-top:14px;padding:9px;background:var(--blue);border-color:var(--blue);color:#fff;font-weight:500}
+#gForm button:disabled{opacity:.6;cursor:default}
+#lgMsg{min-height:18px;margin:10px 0 0;text-align:center}
 #histLista>div{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
 .bi{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
 .hist{display:none;flex-basis:100%;font-size:12px;color:var(--muted);padding:4px 0 2px 8px;border-left:2px solid var(--border)}
@@ -75,7 +85,7 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
-<body>
+<body class="travado">
 <header>
   <h1>Editor de Fluxos</h1>
   <input class="nome" id="nomeFluxo" aria-label="Nome do arquivo" placeholder="Nome do arquivo" title="Nome do arquivo (não altera o nome da atividade)">
@@ -125,14 +135,17 @@ dialog .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   <div id="bibLista" style="max-height:48vh;overflow:auto"></div>
   <div class="bt"><button id="bibFechar">Fechar</button></div>
 </dialog>
-<dialog id="dlgLogin">
-  <h2 style="margin:0 0 4px;font-size:16px;font-weight:500">Entrar na biblioteca</h2>
-  <p class="dica" style="margin:0 0 6px">Use o e-mail e a senha cadastrados para você no Supabase.</p>
-  <label for="lgEmail">E-mail</label><input id="lgEmail" type="email" autocomplete="username">
-  <label for="lgSenha">Senha</label><input id="lgSenha" type="password" autocomplete="current-password">
-  <p class="dica" id="lgMsg"></p>
-  <div class="bt"><button id="lgCancelar">Cancelar</button><button id="lgEntrar">Entrar</button></div>
-</dialog>
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gTitulo">
+  <form id="gForm" autocomplete="on">
+    <img id="gLogo" alt="Logo do escritório">
+    <h1 id="gTitulo">Editor de Fluxos GR5</h1>
+    <p class="dica">Entre com seu e-mail e senha para acessar.</p>
+    <label for="lgEmail">E-mail</label><input id="lgEmail" type="email" autocomplete="username" required>
+    <label for="lgSenha">Senha</label><input id="lgSenha" type="password" autocomplete="current-password" required>
+    <button type="submit" id="lgEntrar">Entrar</button>
+    <p class="dica" id="lgMsg" role="alert"></p>
+  </form>
+</div>
 <dialog id="dlgHist">
   <h2 style="margin:0 0 4px;font-size:16px;font-weight:500">Histórico de alterações</h2>
   <p class="dica" id="histSub" style="margin:0 0 8px"></p>
@@ -712,7 +725,14 @@ function gravarSessao(j){
 }
 function sairSessao(){sessao=null;try{localStorage.removeItem('gr5sb')}catch(e){}uiSessao()}
 function uiSessao(){$('bSair').hidden=!(sbOk&&sessao);$('bSair').textContent='Sair'+(sessao&&sessao.email?' ('+sessao.email+')':'')}
-function abrirLogin(){$('lgMsg').textContent='';$('lgSenha').value='';if(!$('dlgLogin').open)$('dlgLogin').showModal();$('lgEmail').focus()}
+function travar(msg){
+  document.querySelectorAll('dialog[open]').forEach(d=>d.close());
+  document.body.classList.add('travado');
+  $('lgMsg').textContent=msg||'';$('lgSenha').value='';$('lgEntrar').disabled=false;
+  setTimeout(()=>{if(document.body.classList.contains('travado'))$('lgEmail').focus()},0);
+}
+function destravar(){document.body.classList.remove('travado')}
+function abrirLogin(){travar()}
 async function tokenFetch(grant,corpo){
   const r=await fetch(SB.url+'/auth/v1/token?grant_type='+grant,{method:'POST',headers:{apikey:SB.key,'Content-Type':'application/json'},body:JSON.stringify(corpo)});
   if(!r.ok)throw new Error('auth');
@@ -744,16 +764,34 @@ const DBsb={collection(n){
     doc};
 }};
 function comLogin(fn){if(!sessao){pendente=fn;abrirLogin()}else fn()}
-$('lgEntrar').onclick=async()=>{
-  $('lgMsg').textContent='Entrando…';
+$('gLogo').src=LOGO;
+$('gForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!sbOk){$('lgMsg').textContent='Este arquivo ainda não está configurado com o Supabase.';return}
+  $('lgEntrar').disabled=true;$('lgMsg').textContent='Entrando…';
   try{
     gravarSessao(await tokenFetch('password',{email:$('lgEmail').value.trim(),password:$('lgSenha').value}));
-    $('dlgLogin').close();const f=pendente;pendente=null;if(f)f();
-  }catch(e){$('lgMsg').textContent='E-mail ou senha incorretos, ou o Supabase não respondeu.'}
-};
-$('lgSenha').addEventListener('keydown',e=>{if(e.key==='Enter')$('lgEntrar').click()});
-$('lgCancelar').onclick=()=>{pendente=null;$('dlgLogin').close()};
-$('bSair').onclick=sairSessao;
+    $('lgSenha').value='';destravar();const f=pendente;pendente=null;if(f)f();
+  }catch(err){
+    $('lgEntrar').disabled=false;
+    $('lgMsg').textContent=(err&&err.message==='auth')?'E-mail ou senha incorretos.':'Não foi possível conectar. Verifique sua internet e tente de novo.';
+  }
+});
+$('bSair').onclick=()=>{sairSessao();travar('Você saiu. Entre novamente para continuar.')};
+async function iniciarAcesso(){
+  if(!sbOk){travar('Este arquivo ainda não está configurado com o Supabase.');return}
+  if(!sessao){travar();return}
+  $('lgMsg').textContent='Verificando acesso…';
+  try{
+    await garantirSessao();
+    const r=await fetch(SB.url+'/auth/v1/user',{headers:{apikey:SB.key,Authorization:'Bearer '+sessao.access_token}});
+    if(r.ok){destravar();return}
+    sairSessao();travar('Sua sessão expirou. Entre novamente.');
+  }catch(e){
+    if(e&&e.message==='login')return;
+    travar('Não foi possível conectar para verificar o acesso. Verifique sua internet.');
+  }
+}
 if(sbOk){
   DB=DBsb;
   $('bBib').hidden=false;$('bSalvarBib').hidden=false;
@@ -761,6 +799,7 @@ if(sbOk){
   $('bSalvarBib').onclick=()=>comLogin(salvarBib);
   uiSessao();rotuloBib();
 }
+iniciarAcesso();
 </script>
 </body>
 </html>
