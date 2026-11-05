@@ -281,6 +281,8 @@ function efetiva(id,semProprio){
   while(n){if(ehPend(n)&&n.cond.length&&!(semProprio&&n.id===id))cad.push(n.cond);n=n.pai?S.nos[n.pai]:null}
   return cad.length?opcs().map(o=>o.id).filter(o=>cad.every(c=>c.includes(o))):null;
 }
+var exportando=false;
+function filhosV(n){return exportando&&cen?n.filhos.filter(f=>vale(S.nos[f],cen)):n.filhos}
 function vale(n,c){if(!c)return true;const e=efetiva(n.id);return e===null||e.includes(c)}
 function campoVarHTML(n){
   return `<label for="f_campoNome">Campo que muda o fluxo (opcional)</label><input id="f_campoNome" data-k="campoNome" value="${esc(n.campoNome)}" placeholder="Ex.: Tipo de Decisão, Modalidade">
@@ -329,29 +331,29 @@ function desenhar(){
   pos={};
   (function r(id,d){
     prof=Math.max(prof,d);
-    const n=S.nos[id];
-    if(!n.filhos.length){pos[id]={x:x+SLOT/2,y:d*VG+50};x+=SLOT;return}
-    n.filhos.forEach(c=>r(c,d+1));
-    pos[id]={x:(pos[n.filhos[0]].x+pos[n.filhos[n.filhos.length-1]].x)/2,y:d*VG+50};
+    const n=S.nos[id],fl=filhosV(n);
+    if(!fl.length){pos[id]={x:x+SLOT/2,y:d*VG+50};x+=SLOT;return}
+    fl.forEach(c=>r(c,d+1));
+    pos[id]={x:(pos[fl[0]].x+pos[fl[fl.length-1]].x)/2,y:d*VG+50};
   })(S.raiz,0);
   const W=Math.max(x,SLOT)+120, H=(prof+1)*VG+40;
   let linhas='',nos='',voltas='';
-  Object.values(S.nos).forEach(n=>{
-    const p=pos[n.id],i=info(n);
-    if(n.filhos.length){
-      const sy=p.y+CH+i.h+4, ty=pos[n.filhos[0]].y-CH-2, mid=(sy+ty)/2;
+  Object.values(S.nos).filter(n=>pos[n.id]).forEach(n=>{
+    const p=pos[n.id],i=info(n),fl=filhosV(n);
+    if(fl.length){
+      const sy=p.y+CH+i.h+4, ty=pos[fl[0]].y-CH-2, mid=(sy+ty)/2;
       const nv=vale(n,cen);
       linhas+=`<path d="M${p.x},${sy}V${mid}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv?1:.25}"/>`;
-      const xs=n.filhos.map(f=>pos[f].x);
+      const xs=fl.map(f=>pos[f].x);
       if(xs.length>1)linhas+=`<path d="M${Math.min(...xs)},${mid}H${Math.max(...xs)}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv?1:.25}"/>`;
-      n.filhos.forEach(f=>{linhas+=`<path d="M${pos[f].x},${mid}V${ty}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv&&vale(S.nos[f],cen)?1:.25}"/>`});
+      fl.forEach(f=>{linhas+=`<path d="M${pos[f].x},${mid}V${ty}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv&&vale(S.nos[f],cen)?1:.25}"/>`});
     }
-    if(n.volta&&S.nos[n.volta]){
+    if(n.volta&&S.nos[n.volta]&&pos[n.volta]){
       const t=pos[n.volta];
       voltas+=`<path d="M${p.x+CH+2},${p.y}C${p.x+110},${p.y} ${t.x+110},${t.y} ${t.x+CH+4},${t.y}" stroke="var(--line)" stroke-width="2" stroke-dasharray="5 4" fill="none" opacity="${vale(n,cen)?1:.25}" marker-end="url(#seta)"/>`;
     }
   });
-  Object.values(S.nos).forEach(n=>{
+  Object.values(S.nos).filter(n=>pos[n.id]).forEach(n=>{
     const p=pos[n.id],i=info(n);
     nos+=`<g class="no${n.id===sel?' on':''}" data-id="${n.id}" transform="translate(${p.x},${p.y})"${vale(n,cen)?'':' opacity=".28"'}>
       <rect class="sel" x="-88" y="-30" width="176" height="${i.h+CH+40}" rx="8"/>
@@ -522,10 +524,13 @@ const LOGO='data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAAA4CAYAAAB6+vMDAA
 const PAL={bg:'#ffffff',text:'#1f2a37',muted:'#5d6b7a',line:'#8d98a4',blue:'#1b6fb5',red:'#d9281e',sel:'#e3f0fb',border:'#d6dde4',panel:'#f5f7f9',field:'#ffffff'};
 async function salvarJpg(){
   if(!dlCap)return;
-  const sv=$('svg'),vb=sv.getAttribute('viewBox').split(' ').map(Number),W=vb[2],H=vb[3];
+  let svXml,W,H;
+  exportando=true;
+  try{desenhar();const sv0=$('svg'),vb0=sv0.getAttribute('viewBox').split(' ').map(Number);W=vb0[2];H=vb0[3];svXml=sv0.outerHTML}
+  finally{exportando=false;desenhar()}
   const R=S.nos[S.raiz],topo=92,sc=Math.min(2,12000/W,12000/(H+topo));
   const estilo=`<style>.no text{fill:${PAL.text};font:12px Arial,Helvetica,sans-serif}.no .m{fill:${PAL.muted};font-size:11px}.no .al{fill:${PAL.red};font-size:11px}.sel{fill:none;stroke:none}</style>`;
-  let xml=sv.outerHTML.replace(/var\(--(\w+)\)/g,(m,k)=>PAL[k]||'#000');
+  let xml=svXml.replace(/var\(--(\w+)\)/g,(m,k)=>PAL[k]||'#000');
   xml=xml.replace(/<svg[^>]*>/,m=>m.replace(/ width="[^"]*"/,` width="${W*sc}"`).replace(/ height="[^"]*"/,` height="${H*sc}"`)+estilo);
   const img=new Image();
   await new Promise((ok,err)=>{img.onload=ok;img.onerror=err;img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml)});
