@@ -90,6 +90,7 @@ body.travado header,body.travado main{visibility:hidden}
   <h1>Editor de Fluxos</h1>
   <input class="nome" id="nomeFluxo" aria-label="Nome do arquivo" placeholder="Nome do arquivo" title="Nome do arquivo (não altera o nome da atividade)">
   <span class="sp"></span>
+  <select id="cenario" hidden aria-label="Visualizar o fluxo por opção" style="width:auto;max-width:260px"></select>
   <button id="bNovo">Novo</button>
   <button id="bBib" hidden>Biblioteca</button>
   <button id="bSalvarBib" hidden>Salvar na biblioteca</button>
@@ -178,7 +179,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 
 function add(pai,tipo,nome){
   const id='n'+(S.seq++);
-  S.nos[id]={id,tipo,nome,pai,filhos:[],resp:'',prazo:'',obs:'',anexo:false,volta:'',atipo:'',subtipo:'',cliente:'',dest:(tipo==='pendencia'||tipo==='pendatv')?'ativo':'',equipe:'',declResp:false,obsObrig:false,chamado:''};
+  S.nos[id]={id,tipo,nome,pai,filhos:[],resp:'',prazo:'',obs:'',anexo:false,volta:'',atipo:'',subtipo:'',cliente:'',dest:(tipo==='pendencia'||tipo==='pendatv')?'ativo':'',equipe:'',declResp:false,obsObrig:false,chamado:'',campoNome:'',opcoes:[],cond:[]};
   if(pai)S.nos[pai].filhos.push(id);
   return id;
 }
@@ -270,9 +271,42 @@ function blocoDest(n){
   return h;
 }
 function cort(s){return s.length>28?s.slice(0,27)+'…':s}
+var cen='';
+const PAL_OPC=['#d9531e','#2e9d5b','#8a4fd6','#b58900','#0d8fa6','#d6336c','#4c6ef5','#7a6a5a'];
+function opcs(){return S.nos[S.raiz].opcoes}
+function nomeOpc(id){const o=opcs().find(x=>x.id===id);return o?o.nome:''}
+function corOpc(id){const i=opcs().findIndex(x=>x.id===id);return PAL_OPC[(i<0?0:i)%PAL_OPC.length]}
+function efetiva(id,semProprio){
+  const cad=[];let n=S.nos[id];
+  while(n){if(ehPend(n)&&n.cond.length&&!(semProprio&&n.id===id))cad.push(n.cond);n=n.pai?S.nos[n.pai]:null}
+  return cad.length?opcs().map(o=>o.id).filter(o=>cad.every(c=>c.includes(o))):null;
+}
+function vale(n,c){if(!c)return true;const e=efetiva(n.id);return e===null||e.includes(c)}
+function campoVarHTML(n){
+  return `<label for="f_campoNome">Campo que muda o fluxo (opcional)</label><input id="f_campoNome" data-k="campoNome" value="${esc(n.campoNome)}" placeholder="Ex.: Tipo de Decisão, Modalidade">
+    <label>Opções do campo</label>
+    ${n.opcoes.map((o,i)=>`<div class="pes"><input data-op="${o.id}" value="${esc(o.nome)}" aria-label="Opção ${i+1}"><button data-opdel="${o.id}" aria-label="Remover opção">Remover</button></div>`).join('')}
+    <button id="opAdd" style="margin:2px 0 6px">Incluir opção</button>
+    <label for="opLote">Ou cole várias opções (uma por linha)</label><textarea id="opLote" rows="3"></textarea>
+    <button id="opLoteBtn" style="margin-top:4px">Adicionar opções coladas</button>
+    <p class="dica">Depois, em cada pendência, escolha em quais opções ela vale. Sem nada marcado, a pendência vale para todas.</p>`;
+}
+function condHTML(n){
+  const R=S.nos[S.raiz],h=efetiva(n.id,true);
+  return `<label>Só vale quando ${esc(R.campoNome||'o campo')} for:</label>`+
+    R.opcoes.map(o=>`<label class="chk"><input type="checkbox" data-cond="${o.id}" ${n.cond.includes(o.id)?'checked':''} ${h&&!h.includes(o.id)?'disabled':''}><span style="color:${corOpc(o.id)}">●</span> ${esc(o.nome||'(sem nome)')}</label>`).join('')+
+    `<p class="dica">${h?'As opções desabilitadas já foram excluídas por um bloco anterior. ':''}Nada marcado = vale para todas as opções que os blocos anteriores permitem.</p>`;
+}
+function atualizarCenario(){
+  const s=$('cenario'),o=opcs(),chave=o.map(x=>x.id+x.nome).join('|')+'#'+cen;
+  if(s.dataset.k===chave)return;
+  s.dataset.k=chave;s.hidden=!o.length;
+  s.innerHTML='<option value="">Visualizar: todas as opções</option>'+o.map(x=>`<option value="${x.id}" ${x.id===cen?'selected':''}>Visualizar: ${esc(x.nome||'(sem nome)')}</option>`).join('');
+}
 function info(n){
   const rp=usaRP(n);
   const L=n.tipo==='tarefa'?[...(n.atipo?[{t:cort(n.atipo),m:1}]:[]),...quebra(n.subtipo||'Atividade sem nome',24).map(t=>({t,m:0})),...(n.cliente?[{t:cort(n.cliente),m:1}]:[])]:quebra((n.tipo==='fim'?'':n.nome)+(rp&&n.prazo?' ('+n.prazo+')':''),24).map(t=>({t,m:0}));
+  if(ehPend(n)&&n.cond.length){const nm=n.cond.map(nomeOpc).filter(Boolean);if(nm.length){const cor=n.cond.length===1?corOpc(n.cond[0]):'#1b6fb5';quebra('Só em: '+nm.join(' / '),26).forEach(t=>L.push({t,m:3,c:cor}))}}
   const dt=destTexto(n);if(dt)L.push({t:cort(dt),m:1});
   if(n.anexo)L.push({t:'Anexo obrigatório',m:1});
   if(n.obsObrig)L.push({t:'Observação obrigatória',m:1});
@@ -289,6 +323,8 @@ function icone(t){
 function miniIcone(t){return '<svg width="24" height="24" viewBox="-28 -28 56 56" aria-hidden="true">'+icone(t)+'</svg>'}
 
 function desenhar(){
+  if(cen&&!opcs().some(o=>o.id===cen))cen='';
+  atualizarCenario();
   let x=0,prof=0;
   pos={};
   (function r(id,d){
@@ -304,22 +340,23 @@ function desenhar(){
     const p=pos[n.id],i=info(n);
     if(n.filhos.length){
       const sy=p.y+CH+i.h+4, ty=pos[n.filhos[0]].y-CH-2, mid=(sy+ty)/2;
-      linhas+=`<path d="M${p.x},${sy}V${mid}" stroke="var(--line)" stroke-width="2" fill="none"/>`;
+      const nv=vale(n,cen);
+      linhas+=`<path d="M${p.x},${sy}V${mid}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv?1:.25}"/>`;
       const xs=n.filhos.map(f=>pos[f].x);
-      if(xs.length>1)linhas+=`<path d="M${Math.min(...xs)},${mid}H${Math.max(...xs)}" stroke="var(--line)" stroke-width="2" fill="none"/>`;
-      xs.forEach(cx=>{linhas+=`<path d="M${cx},${mid}V${ty}" stroke="var(--line)" stroke-width="2" fill="none"/>`});
+      if(xs.length>1)linhas+=`<path d="M${Math.min(...xs)},${mid}H${Math.max(...xs)}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv?1:.25}"/>`;
+      n.filhos.forEach(f=>{linhas+=`<path d="M${pos[f].x},${mid}V${ty}" stroke="var(--line)" stroke-width="2" fill="none" opacity="${nv&&vale(S.nos[f],cen)?1:.25}"/>`});
     }
     if(n.volta&&S.nos[n.volta]){
       const t=pos[n.volta];
-      voltas+=`<path d="M${p.x+CH+2},${p.y}C${p.x+110},${p.y} ${t.x+110},${t.y} ${t.x+CH+4},${t.y}" stroke="var(--line)" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#seta)"/>`;
+      voltas+=`<path d="M${p.x+CH+2},${p.y}C${p.x+110},${p.y} ${t.x+110},${t.y} ${t.x+CH+4},${t.y}" stroke="var(--line)" stroke-width="2" stroke-dasharray="5 4" fill="none" opacity="${vale(n,cen)?1:.25}" marker-end="url(#seta)"/>`;
     }
   });
   Object.values(S.nos).forEach(n=>{
     const p=pos[n.id],i=info(n);
-    nos+=`<g class="no${n.id===sel?' on':''}" data-id="${n.id}" transform="translate(${p.x},${p.y})">
+    nos+=`<g class="no${n.id===sel?' on':''}" data-id="${n.id}" transform="translate(${p.x},${p.y})"${vale(n,cen)?'':' opacity=".28"'}>
       <rect class="sel" x="-88" y="-30" width="176" height="${i.h+CH+40}" rx="8"/>
       ${icone(n.tipo)}
-      <text text-anchor="middle">${i.L.map((l,k)=>`<tspan x="0" y="${CH+16+k*14}" class="${l.m===2?'al':l.m?'m':''}">${esc(l.t)}</tspan>`).join('')}</text>
+      <text text-anchor="middle">${i.L.map((l,k)=>`<tspan x="0" y="${CH+16+k*14}" class="${l.m===2?'al':l.m?'m':''}"${l.c?` style="fill:${l.c}"`:''}>${esc(l.t)}</tspan>`).join('')}</text>
     </g>`;
   });
   const sv=$('svg');
@@ -342,9 +379,10 @@ function lateral(){
     ${n.tipo==='tarefa'?`<label for="f_atipo">Tipo de atividade – obrigatório</label><select id="f_atipo" data-k="atipo">${['Tarefa','Prazo','Decisão'].map(o=>`<option ${n.atipo===o?'selected':''}>${o}</option>`).join('')}</select>
     <label for="f_sub">Subtipo de atividade – obrigatório</label><input id="f_sub" data-k="subtipo" data-req="1" value="${esc(n.subtipo)}"${n.subtipo.trim()?'':' class="falta"'}>
     <label for="f_cli">Nome do cliente – obrigatório</label><input id="f_cli" data-k="cliente" data-req="1" value="${esc(n.cliente)}"${n.cliente.trim()?'':' class="falta"'}>
-    <label for="f_chamado">Número do chamado</label><input id="f_chamado" data-k="chamado" value="${esc(n.chamado)}">`:''}
+    <label for="f_chamado">Número do chamado</label><input id="f_chamado" data-k="chamado" value="${esc(n.chamado)}">${campoVarHTML(n)}`:''}
     ${usaRP(n)?`${blocoDest(n)}
     <label for="f_prazo">Prazo (ex.: D+1, D+2, D livre) – obrigatório</label><input id="f_prazo" data-k="prazo" data-req="1" value="${esc(n.prazo)}"${n.prazo.trim()?'':' class="falta"'}>`:''}
+    ${ehPend(n)&&S.nos[S.raiz].opcoes.length?condHTML(n):''}
     ${n.tipo==='acao'?`<label class="chk"><input type="checkbox" data-k="anexo" ${n.anexo?'checked':''}>Anexo obrigatório</label>
     <label class="chk"><input type="checkbox" data-k="obsObrig" ${n.obsObrig?'checked':''}>Observação obrigatória</label>
     <label for="f_volta">Ao clicar, volta para a pendência</label><select id="f_volta" data-k="volta"><option value="">— não volta —</option>${pend.map(p=>`<option value="${p.id}" ${n.volta===p.id?'selected':''}>${esc(p.nome)}</option>`).join('')}</select>${n.volta?'<p class="dica">Ação que volta para uma pendência exige prazo. O responsável só é obrigatório se você marcar “Declinar para um responsável”.</p>':''}`:''}
@@ -364,6 +402,12 @@ function lateral(){
     desenhar();guardar();
   });
   document.querySelectorAll('[data-abreeq]').forEach(b=>b.onclick=abrirEquipes);
+  const R0=S.nos[S.raiz];
+  document.querySelectorAll('[data-op]').forEach(i=>i.oninput=()=>{const o=R0.opcoes.find(x=>x.id===i.dataset.op);if(o){o.nome=i.value;desenhar();guardar()}});
+  document.querySelectorAll('[data-opdel]').forEach(b=>b.onclick=()=>{R0.opcoes=R0.opcoes.filter(x=>x.id!==b.dataset.opdel);Object.values(S.nos).forEach(x=>{x.cond=x.cond.filter(c=>c!==b.dataset.opdel)});tudo()});
+  if($('opAdd'))$('opAdd').onclick=()=>{R0.opcoes.push({id:novoId(),nome:''});tudo();const ins=document.querySelectorAll('[data-op]');if(ins.length)ins[ins.length-1].focus()};
+  if($('opLoteBtn'))$('opLoteBtn').onclick=()=>{$('opLote').value.split('\n').map(t=>t.trim()).filter(Boolean).forEach(t=>{if(!R0.opcoes.some(o=>o.nome.toLowerCase()===t.toLowerCase()))R0.opcoes.push({id:novoId(),nome:t})});tudo()};
+  document.querySelectorAll('[data-cond]').forEach(c=>c.onchange=()=>{const nn=S.nos[sel];nn.cond=c.checked?nn.cond.concat(c.dataset.cond):nn.cond.filter(x=>x!==c.dataset.cond);tudo()});
   const d=$('bDel');
   if(d)d.onclick=()=>{
     remover(sel);tudo();aviso('Bloco excluído.');
@@ -415,10 +459,12 @@ function guiaTexto(){
   const L=['ATIVIDADE: '+(R.subtipo||'(sem nome)'),'Tipo: '+(R.atipo||'-')+(R.cliente?' | Cliente: '+R.cliente:'')+(R.chamado?' | Chamado: '+R.chamado:'')];
   {const fr=faltas(R);if(fr.length)L.push('ATENÇÃO: falta '+juntar(fr))}
   if(R.obs)L.push('Obs.: '+R.obs.replace(/\n/g,' '));
+  if(R.opcoes.length)L.push('Campo que muda o fluxo: '+(R.campoNome||'(sem nome)')+' | Opções: '+R.opcoes.map(o=>o.nome||'(sem nome)').join('; '));
   L.push('');
   const usadas=new Set();
-  (function r(id,d){
+  const percorrer=c=>(function r(id,d){
     const n=S.nos[id],pad='   '.repeat(Math.max(0,d-1));
+    if(!vale(n,c))return;
     if(n.tipo==='tarefa'){n.filhos.forEach(f=>r(f,d+1));return}
     let l=`${pad}• ${TIPOS[n.tipo].nome}: ${n.nome}`;
     const dt=destGuia(n);
@@ -428,11 +474,15 @@ function guiaTexto(){
     if(n.anexo)l+=' | Anexo obrigatório';
     if(n.obsObrig)l+=' | Observação obrigatória';
     if(n.volta&&S.nos[n.volta])l+=` | Volta para a pendência: ${S.nos[n.volta].nome}`;
+    if(ehPend(n)&&n.cond.length)l+=' | Condição: '+(S.nos[S.raiz].campoNome||'campo')+' igual a '+n.cond.map(nomeOpc).filter(Boolean).join(' ou ');
     const fl=faltas(n);if(fl.length)l+=' | ATENÇÃO: falta '+juntar(fl);
     L.push(l);
     if(n.obs)L.push(`${pad}   Obs.: ${n.obs.replace(/\n/g,' ')}`);
     n.filhos.forEach(f=>r(f,d+1));
   })(S.raiz,0);
+  percorrer('');
+  const R2=S.nos[S.raiz];
+  R2.opcoes.forEach(o=>{L.push('','=== '+(R2.campoNome||'Opção')+': '+(o.nome||'(sem nome)')+' ===');percorrer(o.id)});
   if(usadas.size){
     L.push('','EQUIPES USADAS:');
     usadas.forEach(id=>{
@@ -453,9 +503,10 @@ async function salvar(nome,texto,tipo){
 }
 function normalizar(d){
   if(d.libId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.libId)){delete d.libId;delete d.libVer}
-  Object.values(d.nos).forEach(n=>{['resp','prazo','obs','atipo','subtipo','cliente','dest','equipe','chamado'].forEach(k=>{if(typeof n[k]!=='string')n[k]=''});n.declResp=!!n.declResp;n.obsObrig=!!n.obsObrig;if(n.tipo==='fim')n.nome='FIM'});
+  Object.values(d.nos).forEach(n=>{['resp','prazo','obs','atipo','subtipo','cliente','dest','equipe','chamado','campoNome'].forEach(k=>{if(typeof n[k]!=='string')n[k]=''});n.declResp=!!n.declResp;n.obsObrig=!!n.obsObrig;if(!Array.isArray(n.cond))n.cond=[];if(!Array.isArray(n.opcoes))n.opcoes=[];if(n.tipo==='fim')n.nome='FIM'});
   const r=d.nos[d.raiz];
   if(!r.atipo)r.atipo='Tarefa';
+  {const ids=r.opcoes.map(o=>o.id);Object.values(d.nos).forEach(n=>{n.cond=n.cond.filter(c=>ids.includes(c))})}
   if(!d.v){
     Object.values(d.nos).forEach(n=>{if(n.tipo==='pendencia'&&!n.dest&&n.resp)n.dest='resp'});
     if(r.nome&&r.nome!=='Nome da atividade'&&!r.subtipo.includes(r.nome))r.subtipo=r.nome+(r.subtipo?' – '+r.subtipo:'');
@@ -486,7 +537,7 @@ async function salvarJpg(){
   if(lg.naturalWidth){const lh=64,lw=lh*lg.naturalWidth/lg.naturalHeight;g.drawImage(lg,24*sc,14*sc,lw*sc,lh*sc);tx=24+lw+24}
   g.fillStyle=PAL.text;g.font=`bold ${22*sc}px Arial, sans-serif`;g.fillText(R.subtipo||'Atividade sem nome',tx*sc,44*sc);
   g.fillStyle=PAL.muted;g.font=`${14*sc}px Arial, sans-serif`;
-  g.fillText([R.atipo,R.cliente].filter(Boolean).join('  |  '),tx*sc,68*sc);
+  g.fillText([R.atipo,R.cliente,cen?(S.nos[S.raiz].campoNome||'Opção')+': '+nomeOpc(cen):''].filter(Boolean).join('  |  '),tx*sc,68*sc);
   {const t=new Date(),z=x=>String(x).padStart(2,'0');
    g.textAlign='right';g.fillStyle=PAL.muted;g.font=`${12*sc}px Arial, sans-serif`;
    g.fillText('Exportado em '+z(t.getDate())+'/'+z(t.getMonth()+1)+'/'+t.getFullYear()+' às '+z(t.getHours())+':'+z(t.getMinutes()),(W-24)*sc,22*sc);
@@ -518,6 +569,7 @@ $('gCopiar').onclick=async()=>{
   catch(e){const r=document.createRange();r.selectNodeContents($('guia'));const s=getSelection();s.removeAllRanges();s.addRange(r);$('gCopiar').textContent='Texto selecionado: use Ctrl+C'}
   setTimeout(()=>$('gCopiar').textContent='Copiar texto',2500);
 };
+$('cenario').onchange=e=>{cen=e.target.value;desenhar()};
 $('zp').onclick=()=>{escala=Math.min(2,escala+.15);desenhar()};
 $('zm').onclick=()=>{escala=Math.max(.4,escala-.15);desenhar()};
 
