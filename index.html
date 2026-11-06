@@ -528,26 +528,34 @@ async function salvarJpg(){
   exportando=true;
   try{desenhar();const sv0=$('svg'),vb0=sv0.getAttribute('viewBox').split(' ').map(Number);W=vb0[2];H=vb0[3];svXml=sv0.outerHTML}
   finally{exportando=false;desenhar()}
-  const R=S.nos[S.raiz],topo=92,sc=Math.min(2,12000/W,12000/(H+topo));
+  const R=S.nos[S.raiz],topo=92,CW=Math.max(W,960),CH=Math.max(H+topo,420),sc=Math.min(2,12000/CW,12000/CH);
   const estilo=`<style>.no text{fill:${PAL.text};font:12px Arial,Helvetica,sans-serif}.no .m{fill:${PAL.muted};font-size:11px}.no .al{fill:${PAL.red};font-size:11px}.sel{fill:none;stroke:none}</style>`;
   let xml=svXml.replace(/var\(--(\w+)\)/g,(m,k)=>PAL[k]||'#000');
   xml=xml.replace(/<svg[^>]*>/,m=>m.replace(/ width="[^"]*"/,` width="${W*sc}"`).replace(/ height="[^"]*"/,` height="${H*sc}"`)+estilo);
   const img=new Image();
   await new Promise((ok,err)=>{img.onload=ok;img.onerror=err;img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml)});
-  const c=document.createElement('canvas');c.width=Math.round(W*sc);c.height=Math.round((H+topo)*sc);
+  const c=document.createElement('canvas');c.width=Math.round(CW*sc);c.height=Math.round(CH*sc);
   const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
   const lg=new Image();
   await new Promise(ok=>{lg.onload=ok;lg.onerror=ok;lg.src=LOGO});
   let tx=24;
   if(lg.naturalWidth){const lh=64,lw=lh*lg.naturalWidth/lg.naturalHeight;g.drawImage(lg,24*sc,14*sc,lw*sc,lh*sc);tx=24+lw+24}
-  g.fillStyle=PAL.text;g.font=`bold ${22*sc}px Arial, sans-serif`;g.fillText(R.subtipo||'Atividade sem nome',tx*sc,44*sc);
-  g.fillStyle=PAL.muted;g.font=`${14*sc}px Arial, sans-serif`;
-  g.fillText([R.atipo,R.cliente,cen?(S.nos[S.raiz].campoNome||'Opção')+': '+nomeOpc(cen):''].filter(Boolean).join('  |  '),tx*sc,68*sc);
+  const escreve=(txt,x,y,px,peso,max,min)=>{
+    let t=px,corte=false;const fn=()=>{g.font=`${peso} ${t*sc}px Arial, sans-serif`};
+    fn();while(t>min&&g.measureText(txt).width>max*sc){t--;fn()}
+    while(txt.length>3&&g.measureText(txt).width>max*sc){txt=txt.slice(0,-2);corte=true}
+    g.fillText(corte?txt.trimEnd()+'…':txt,x*sc,y*sc);
+  };
+  g.fillStyle=PAL.text;
+  escreve(R.subtipo||'Atividade sem nome',tx,44,22,'bold',CW-tx-24,13);
+  g.fillStyle=PAL.muted;
+  escreve([R.atipo,R.cliente,cen?(S.nos[S.raiz].campoNome||'Opção')+': '+nomeOpc(cen):''].filter(Boolean).join('  |  '),tx,68,14,'normal',CW-tx-24,11);
+  g.strokeStyle=PAL.border;g.lineWidth=sc;g.beginPath();g.moveTo(24*sc,(topo-6)*sc);g.lineTo((CW-24)*sc,(topo-6)*sc);g.stroke();
   {const t=new Date(),z=x=>String(x).padStart(2,'0');
    g.textAlign='right';g.fillStyle=PAL.muted;g.font=`${12*sc}px Arial, sans-serif`;
-   g.fillText('Exportado em '+z(t.getDate())+'/'+z(t.getMonth()+1)+'/'+t.getFullYear()+' às '+z(t.getHours())+':'+z(t.getMinutes()),(W-24)*sc,22*sc);
+   g.fillText('Exportado em '+z(t.getDate())+'/'+z(t.getMonth()+1)+'/'+t.getFullYear()+' às '+z(t.getHours())+':'+z(t.getMinutes()),(CW-24)*sc,22*sc);
    g.textAlign='left'}
-  g.drawImage(img,0,topo*sc,W*sc,H*sc);
+  g.drawImage(img,((CW-W)/2)*sc,topo*sc,W*sc,H*sc);
   const blob=await new Promise(ok=>c.toBlob(ok,'image/jpeg',0.92));
   if(!blob){aviso('Não foi possível gerar a imagem.');return}
   try{await dlCap.save({filename:slug(S.nome)+'.jpg',data:blob})}catch(e){if(e&&e.code!=='declined')aviso('Não foi possível salvar o JPG.')}
